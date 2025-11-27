@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "91482257895",
+    "project_id": "sleep-coffee-advisor",
+    "storage_bucket": "sleep-coffee-advisor.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:91482257895:android:3964bbe25c45b07365e542",
+        "android_client_info": {
+          "package_name": "com.example.sleep_coffee_advisor"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAxgx8TMxFcQxzzKdt1oHHVsxur3SobqGY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

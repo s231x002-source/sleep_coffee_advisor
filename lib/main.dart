@@ -3,7 +3,41 @@ import 'dart:ui' show FontFeature;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
-void main() => runApp(const SleepCoffeeApp());
+// ★ 追加：Firebase Core をインポート
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+// ★ 追加：flutterfire configure が生成したオプション
+import 'firebase_options.dart';
+
+
+
+
+
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  //匿名ログイン（未ログイン時のみ）
+  final auth = FirebaseAuth.instance;
+  if (auth.currentUser == null) {
+    try {
+      await auth.signInAnonymously();
+      debugPrint('Signed in anonymously. uid=${auth.currentUser?.uid}');
+    } on FirebaseAuthException catch (e) {
+      debugPrint('Anonymous sign-in failed: ${e.code} ${e.message}');
+      // 失敗してもアプリは起動できるようにする（必要ならリトライUIを用意）
+    }
+  } else {
+    debugPrint('Already signed in. uid=${auth.currentUser?.uid}');
+  }
+
+  runApp(const SleepCoffeeApp());
+}
 
 class SleepCoffeeApp extends StatelessWidget {
   const SleepCoffeeApp({super.key});
@@ -81,6 +115,45 @@ class _HomePageState extends State<HomePage> {
         wakeFeeling: _feeling,
       );
     });
+    _saveBrewHistory();
+  }
+
+  Future<void> _saveBrewHistory() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      debugPrint('No UID: not signed in');
+      return;
+    }
+
+    try {
+      final advice = _advice; // 計算結果（nullの可能性あり）
+      await FirebaseFirestore.instance
+          .collection('users').doc(uid)
+          .collection('brews')
+          .add({
+        'timestamp': FieldValue.serverTimestamp(), // サーバ時刻
+        'wakeFeeling': _feeling.round(),           // 起床時の調子（1–10）
+        'bedTime': _fmt(_bed),                     // 就寝時刻（"23:30"）
+        'wakeTime': _fmt(_wake),                   // 起床時刻（"07:00"）
+        'advice': advice == null
+            ? null
+            : {
+          'coffeeName': advice.coffeeName,
+          'caffeineLevel': advice.caffeineLevel,
+          'score': advice.score,
+          'totalSleepMin': advice.totalSleep.inMinutes,
+        },
+      });
+
+      debugPrint('Brew history saved!');
+    } catch (e, st) {
+      debugPrint('Save failed: $e\n$st');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('保存に失敗しました')),
+        );
+      }
+    }
   }
 
   String _fmt(TimeOfDay t) =>
@@ -353,7 +426,7 @@ class _ResultCard extends StatelessWidget {
                   .titleMedium
                   ?.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
-          Text('総睡眠時間：${h}時間${m}分'),
+          Text('総睡眠時間：$h時間$m分'),
           Text('総合スコア：${advice.score.toStringAsFixed(1)} / 10'),
           if (h == 24 && m == 0)
             Padding(
