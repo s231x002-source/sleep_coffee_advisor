@@ -11,6 +11,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 // ★ 追加：flutterfire configure が生成したオプション
 import 'firebase_options.dart';
 
+// ★ 追加：タイマー用
+import 'dart:async';
+
+
 
 
 
@@ -286,6 +290,29 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
 
+              const SizedBox(height: 24),
+
+              // ★ 追加：コーヒーナップタイマーへの入口
+              const _SectionTitle('おまけ：コーヒーナップタイマー'),
+              Card.outlined(
+                child: ListTile(
+                  leading: const Icon(Icons.timer_rounded),
+                  title: const Text('コーヒーナップタイマー'),
+                  subtitle: const Text(
+                    'コーヒーを飲んだあと短時間のお昼寝用のタイマーです',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const CoffeeNapTimerPage(),
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+
               const SizedBox(height: 16),
 
               if (_advice != null) _ResultCard(advice: _advice!),
@@ -376,7 +403,7 @@ class CoffeeRecommender {
       score: score,
       coffeeName: name,
       caffeineLevel: caffeine,
-    );//hello
+    );
   }
 
   Duration _calcTotalSleep(TimeOfDay bed, TimeOfDay wake) {
@@ -395,6 +422,193 @@ class CoffeeRecommender {
     return 'デカフェ / ハーブティー';
   }
 }
+
+class CoffeeNapTimer {
+  final Duration initial;     // 最初にセットした時間
+  Duration remaining;         // 残り時間
+  Timer? _timer;
+
+  CoffeeNapTimer({Duration? initial})
+      : initial = initial ?? const Duration(minutes: 20),
+        remaining = initial ?? const Duration(minutes: 20);
+
+  bool get isRunning => _timer != null;
+
+  void start({
+    required void Function(Duration) onTick,
+    required VoidCallback onFinished,
+  }) {
+    // いったん止めてからスタート
+    _timer?.cancel();
+    remaining = initial;
+
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      remaining -= const Duration(seconds: 1);
+
+      if (remaining <= Duration.zero) {
+        timer.cancel();
+        _timer = null;
+        remaining = Duration.zero;
+        onTick(remaining);
+        onFinished();
+      } else {
+        onTick(remaining);
+      }
+    });
+  }
+
+  void stop() {
+    _timer?.cancel();
+    _timer = null;
+  }
+
+  void dispose() {
+    stop();
+  }
+}
+
+class CoffeeNapTimerPage extends StatefulWidget {
+  const CoffeeNapTimerPage({super.key});
+
+  @override
+  State<CoffeeNapTimerPage> createState() => _CoffeeNapTimerPageState();
+}
+
+class _CoffeeNapTimerPageState extends State<CoffeeNapTimerPage> {
+  CoffeeNapTimer? _timer;
+  Duration _napDuration = const Duration(minutes: 20); // お昼寝時間
+  Duration _remaining = const Duration(minutes: 20);   // 表示用残り時間
+  bool _running = false;
+
+  String _format(Duration d) {
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  void _start() {
+    // 既存タイマー終了
+    _timer?.dispose();
+
+    // 新しいタイマーを作成
+    _timer = CoffeeNapTimer(initial: _napDuration);
+
+    setState(() {
+      _remaining = _napDuration;
+      _running = true;
+    });
+
+    _timer!.start(
+      onTick: (d) {
+        if (!mounted) return;
+        setState(() {
+          _remaining = d;
+        });
+      },
+      onFinished: () {
+        if (!mounted) return;
+        setState(() {
+          _running = false;
+          _remaining = Duration.zero;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('お昼寝おつかれさまです！コーヒーが効き始める時間です☕'),
+          ),
+        );
+      },
+    );
+  }
+
+  void _stop() {
+    _timer?.dispose();
+    setState(() {
+      _running = false;
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('コーヒーナップタイマー'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Card(
+              color: cs.primaryContainer,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  'コーヒーを飲んでから'
+                      '${_napDuration.inMinutes}分のお昼寝をすると、'
+                      '起きる頃にカフェインが効き始めてスッキリしやすいと言われています。',
+                  style: TextStyle(
+                    color: cs.onPrimaryContainer,
+                    height: 1.3,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text('お昼寝時間（分）'),
+            Slider(
+              min: 10,
+              max: 30,
+              divisions: 4, // 10, 15, 20, 25, 30
+              value: _napDuration.inMinutes.toDouble(),
+              label: '${_napDuration.inMinutes}分',
+              onChanged: _running
+                  ? null
+                  : (v) {
+                final m = v.round();
+                setState(() {
+                  _napDuration = Duration(minutes: m);
+                  _remaining = _napDuration;
+                });
+              },
+            ),
+            const SizedBox(height: 24),
+            Expanded(
+              child: Center(
+                child: Text(
+                  _format(_remaining),
+                  style: const TextStyle(
+                    fontSize: 72,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: _running ? _stop : _start,
+              icon: Icon(
+                _running ? Icons.stop_rounded : Icons.play_arrow_rounded,
+              ),
+              label: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Text(_running ? '停止' : 'スタート'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 
 class _ResultCard extends StatelessWidget {
   final Advice advice;
