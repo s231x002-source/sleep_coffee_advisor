@@ -1,5 +1,4 @@
-//newbranch1での作業test
-//hello
+
 import 'dart:ui' show FontFeature;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -12,6 +11,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 // ★ 追加：flutterfire configure が生成したオプション
 import 'firebase_options.dart';
 
+import 'services/notification_service.dart'; // 12月11日　追記
+import 'services/schedule_service.dart';     // 12月11日　追記
 
 
 
@@ -29,9 +30,15 @@ void main() async {
     try {
       await auth.signInAnonymously();
       debugPrint('Signed in anonymously. uid=${auth.currentUser?.uid}');
+      // ★ 追加：通知の初期化（権限&チャネル&タイムゾーン）
+      await NotificationService.instance.init();
+
     } on FirebaseAuthException catch (e) {
       debugPrint('Anonymous sign-in failed: ${e.code} ${e.message}');
       // 失敗してもアプリは起動できるようにする（必要ならリトライUIを用意）
+
+      // ★ 通知の初期化（チャンネル作成＆権限リクエスト＆タイムゾーン初期化）
+      await NotificationService.instance.init();
     }
   } else {
     debugPrint('Already signed in. uid=${auth.currentUser?.uid}');
@@ -86,6 +93,10 @@ class _HomePageState extends State<HomePage> {
   Advice? _advice;
   late final CoffeeRecommender _recommender = CoffeeRecommender();
   bool _force24h = true;
+
+  final _notifier = NotificationService.instance; // 追加
+  final _scheduler = ScheduleService();           // 追加
+
 
   Future<void> _pickTime({required bool isBed}) async {
     final picked = await showTimePicker(
@@ -154,6 +165,26 @@ class _HomePageState extends State<HomePage> {
           const SnackBar(content: Text('保存に失敗しました')),
         );
       }
+    }
+    final now = DateTime.now();
+    // 4時間後休憩
+    final restAt = _scheduler.restAfterCaffeine(now);
+    await _notifier.scheduleAt(
+      when: restAt,
+      title: '休憩のタイミングです',
+      body: '摂取から4時間経過。軽いストレッチや目の休息を。',
+      payload: 'rest',
+    );
+
+    // 集中力低下予測（scoreに応じて）
+    if (_advice != null) {
+      final dropAt = _scheduler.concentrationDrop(now, _advice!.score);
+      await _notifier.scheduleAt(
+        when: dropAt,
+        title: '集中力の低下タイミング予測',
+        body: 'そろそろ集中力が落ち始めます。5〜10分の休憩がおすすめ。',
+        payload: 'focus',
+      );
     }
   }
 
