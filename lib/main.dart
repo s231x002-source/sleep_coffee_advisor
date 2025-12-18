@@ -1,9 +1,9 @@
-
-import 'dart:ui' show FontFeature;
+import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 
-void main() => runApp(const SleepCoffeeApp());
+void main() {
+  runApp(const SleepCoffeeApp());
+}
 
 class SleepCoffeeApp extends StatelessWidget {
   const SleepCoffeeApp({super.key});
@@ -11,392 +11,339 @@ class SleepCoffeeApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: '睡眠×コーヒー提案',
+      title: '睡眠 × コーヒー提案',
       debugShowCheckedModeBanner: false,
-      themeMode: ThemeMode.system,
       theme: ThemeData(
         useMaterial3: true,
-        colorSchemeSeed: Colors.teal,
-        fontFamily: 'NotoSansJP',
+        fontFamily: 'sans',
       ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: Colors.teal,
-        fontFamily: 'NotoSansJP',
-      ),
-      localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: const <Locale>[
-        Locale('ja'),
-        Locale('en'),
-      ],
-      home: const HomePage(),
+      home: const HomeScreen(),
     );
   }
 }
 
-class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
   @override
-  State<HomePage> createState() => _HomePageState();
+  State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomePageState extends State<HomePage> {
-  TimeOfDay _bed = const TimeOfDay(hour: 23, minute: 30);
-  TimeOfDay _wake = const TimeOfDay(hour: 7, minute: 0);
-  double _feeling = 6;
-  Advice? _advice;
-  late final CoffeeRecommender _recommender = CoffeeRecommender();
-  bool _force24h = true;
+class _HomeScreenState extends State<HomeScreen> {
+  double condition = 6;
+  TimeOfDay sleepTime = const TimeOfDay(hour: 23, minute: 30);
+  TimeOfDay wakeTime = const TimeOfDay(hour: 7, minute: 0);
+  String? resultCoffee;
 
-  Future<void> _pickTime({required bool isBed}) async {
-    final picked = await showTimePicker(
+  // --- Coffee Theme Colors ---
+  final Color coffeeDark = const Color(0xFF6B4F3A);
+  final Color coffeeMilk = const Color(0xFFDCC4A2);
+  final Color coffeeLatte = const Color(0xFFF7EFE5);
+  final Color coffeeAccent = const Color(0xFFB07B52);
+
+  // --- Time Picker ---
+  Future<void> pickTime(bool isSleepTime) async {
+    final TimeOfDay? newTime = await showTimePicker(
       context: context,
-      helpText: isBed ? '就寝時刻を選択' : '起床時刻を選択',
-      initialTime: isBed ? _bed : _wake,
-      initialEntryMode: TimePickerEntryMode.dial,
+      initialTime: isSleepTime ? sleepTime : wakeTime,
       builder: (context, child) {
-        final media = MediaQuery.of(context);
-        return MediaQuery(
-          data: media.copyWith(
-            alwaysUse24HourFormat: _force24h ? true : media.alwaysUse24HourFormat,
+        return Theme(
+          data: ThemeData.light().copyWith(
+            colorScheme: ColorScheme.light(primary: coffeeAccent),
           ),
           child: child!,
         );
       },
     );
-    if (picked != null) {
-      setState(() => isBed ? _bed = picked : _wake = picked);
+
+    if (newTime != null) {
+      setState(() {
+        if (isSleepTime) {
+          sleepTime = newTime;
+        } else {
+          wakeTime = newTime;
+        }
+      });
     }
   }
 
-  void _calculate() {
-    setState(() {
-      _advice = _recommender.advise(
-        bedTime: _bed,
-        wakeTime: _wake,
-        wakeFeeling: _feeling,
-      );
-    });
+  // --- Main Logic ---
+  void analyze() {
+    int sleepMinutes =
+        (wakeTime.hour * 60 + wakeTime.minute) -
+            (sleepTime.hour * 60 + sleepTime.minute);
+
+    if (sleepMinutes < 0) sleepMinutes += 24 * 60;
+
+    if (condition <= 4) {
+      resultCoffee = "カフェラテ（優しい味）";
+    } else if (sleepMinutes < 360) {
+      resultCoffee = "アメリカーノ（すっきり）";
+    } else {
+      resultCoffee = "ドリップ（深煎り）";
+    }
+
+    setState(() {});
   }
 
-  String _fmt(TimeOfDay t) =>
-      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+  // --------------------------------------------------------------------------
+  //  UI
+  // --------------------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('睡眠×コーヒー提案'),
-        centerTitle: true,
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  gradient: LinearGradient(
-                    colors: [cs.primaryContainer, cs.secondaryContainer],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.bedtime_rounded, color: cs.onPrimaryContainer),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        '今日のコンディションに合う一杯を提案します',
-                        style: TextStyle(
-                          color: cs.onPrimaryContainer,
-                          fontWeight: FontWeight.w700,
-                        ),
-                        softWrap: true,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    )
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
+      body: Container(
+        // Background image + gradient blend
+        decoration: BoxDecoration(
+          image: DecorationImage(
+            image: const AssetImage("assets/images/background.png"),
+            fit: BoxFit.cover,
+            opacity: 0.32,
+          ),
+          gradient: LinearGradient(
+            colors: [
+              Colors.brown.shade900.withOpacity(0.6),
+              Colors.brown.shade400.withOpacity(0.4),
+            ],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
 
-              const _SectionTitle('1. 起きた時の調子（1〜10）'),
-              Card.outlined(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Semantics(
-                          label: '起きた時の調子',
-                          value: _feeling.toStringAsFixed(0),
-                          hint: '1から10の間で選択',
-                          child: Slider(
-                            min: 1,
-                            max: 10,
-                            divisions: 9,
-                            value: _feeling,
-                            label: _feeling.toStringAsFixed(0),
-                            onChanged: (v) => setState(() => _feeling = v),
-                          ),
-                        ),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              children: [
+                const SizedBox(height: 12),
+
+                // --- Title ---
+                Text(
+                  "Sleep2Sip",
+                  style: TextStyle(
+                    fontSize: 30,
+                    fontWeight: FontWeight.bold,
+                    color: coffeeLatte,
+                    shadows: [
+                      Shadow(
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                        color: Colors.black.withOpacity(0.3),
                       ),
-                      const SizedBox(
-                        width: 48,
-                        child: Text(
-                          // $h 形式のlint対応: こちらは数値ではないが braceなしでOKな箇所のみ修正
-                          '',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                        ),
-                      )
                     ],
                   ),
                 ),
-              ),
 
-              const SizedBox(height: 12),
+                const SizedBox(height: 8),
 
-              const _SectionTitle('2. 時刻（24時間表記）'),
-              Row(
-                children: [
-                  Expanded(
-                    child: _TimeField(
-                      label: '就寝時刻',
-                      value: _fmt(_bed),
-                      onTap: () => _pickTime(isBed: true),
-                    ),
+                Text(
+                  "今日のコンディションに合う一杯を提案します",
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: coffeeLatte.withOpacity(0.95),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _TimeField(
-                      label: '起床時刻',
-                      value: _fmt(_wake),
-                      onTap: () => _pickTime(isBed: false),
-                    ),
-                  ),
-                ],
-              ),
-
-              Align(
-                alignment: Alignment.centerRight,
-                child: SwitchListTile.adaptive(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('24時間表記を強制'),
-                  value: _force24h,
-                  onChanged: (v) => setState(() => _force24h = v),
                 ),
-              ),
 
-              const SizedBox(height: 16),
+                const SizedBox(height: 25),
 
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  icon: const Icon(Icons.local_cafe_rounded),
-                  label: const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 12),
-                    child: Text('提案する'),
-                  ),
-                  onPressed: _calculate,
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              if (_advice != null) _ResultCard(advice: _advice!),
-
-              const SizedBox(height: 24),
-              Text('Flutter (Material 3) Demo', style: TextStyle(color: cs.outline)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  final String text;
-  const _SectionTitle(this.text, {super.key});
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Text(
-          text,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700) ??
-              const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-        ),
-      ),
-    );
-  }
-}
-
-class _TimeField extends StatelessWidget {
-  final String label;
-  final String value;
-  final VoidCallback onTap;
-  const _TimeField({required this.label, required this.value, required this.onTap, super.key});
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
-      onTap: onTap,
-      child: InputDecorator(
-        decoration: const InputDecoration(
-          labelText: '',
-          border: OutlineInputBorder(),
-          suffixIcon: Icon(Icons.schedule_rounded),
-        ).copyWith(labelText: label),
-        child: Text(
-          value,
-          style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
-        ),
-      ),
-    );
-  }
-}
-
-class Advice {
-  final Duration totalSleep;
-  final double score;
-  final String coffeeName;
-  final int caffeineLevel;
-  const Advice({
-    required this.totalSleep,
-    required this.score,
-    required this.coffeeName,
-    required this.caffeineLevel,
-  });
-}
-
-class CoffeeRecommender {
-  Advice advise({
-    required TimeOfDay bedTime,
-    required TimeOfDay wakeTime,
-    required double wakeFeeling,
-  }) {
-    final total = _calcTotalSleep(bedTime, wakeTime);
-    const target = Duration(hours: 8);
-    final qtyScore =
-        (10.0 - ((total - target).inMinutes.abs() / 30.0)).clamp(0, 10).toDouble();
-    final score = ((qtyScore + wakeFeeling) / 2).clamp(0, 10).toDouble();
-    final caffeine = (11 - score.round()).clamp(1, 10);
-    final name = _nameFromLevel(caffeine);
-    return Advice(
-      totalSleep: total,
-      score: score,
-      coffeeName: name,
-      caffeineLevel: caffeine,
-    );
-  }
-
-  Duration _calcTotalSleep(TimeOfDay bed, TimeOfDay wake) {
-    final bedM = bed.hour * 60 + bed.minute;
-    final wakeM = wake.hour * 60 + wake.minute;
-    var diff = wakeM - bedM;
-    if (diff <= 0) diff += 24 * 60;
-    return Duration(minutes: diff);
-  }
-
-  String _nameFromLevel(int level) {
-    if (level >= 8) return 'エスプレッソ ダブル';
-    if (level >= 6) return 'ドリップ（深煎り）';
-    if (level >= 4) return 'アメリカーノ（薄め）';
-    if (level >= 2) return 'カフェラテ';
-    return 'デカフェ / ハーブティー';
-  }
-}
-
-class _ResultCard extends StatelessWidget {
-  final Advice advice;
-  const _ResultCard({required this.advice});
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final h = advice.totalSleep.inHours;
-    final m = advice.totalSleep.inMinutes % 60;
-
-    late final Color badge;
-    if (advice.caffeineLevel >= 8) {
-      badge = Colors.redAccent;
-    } else if (advice.caffeineLevel >= 5) {
-      badge = cs.primary;
-    } else if (advice.caffeineLevel >= 3) {
-      badge = Colors.teal;
-    } else {
-      badge = Colors.blueGrey;
-    }
-
-    return Card.outlined(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('分析結果',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 8),
-          Text('総睡眠時間：${h}時間${m}分'),
-          Text('総合スコア：${advice.score.toStringAsFixed(1)} / 10'),
-          if (h == 24 && m == 0)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(
-                '就寝と起床が同じ時刻です。翌日の起床として計算しました。',
-                style: TextStyle(color: cs.onSurfaceVariant),
-              ),
-            ),
-          const SizedBox(height: 12),
-          Container(
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerHighest,
-              border: Border.all(color: cs.outlineVariant),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Icon(Icons.local_cafe_rounded, color: badge),
-                const SizedBox(width: 12),
-                Expanded(
+                // ------------------------------------------------------------------
+                // 1. Condition (Slider)
+                // ------------------------------------------------------------------
+                glassCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        advice.coffeeName,
-                        style: TextStyle(
-                          color: badge,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 18,
+                      label("1. 起きた時の調子（1〜10）"),
+                      const SizedBox(height: 10),
+
+                      Slider(
+                        value: condition,
+                        min: 1,
+                        max: 10,
+                        activeColor: coffeeAccent,
+                        inactiveColor: coffeeMilk,
+                        onChanged: (v) => setState(() => condition = v),
+                      ),
+
+                      Center(
+                        child: Text(
+                          "${condition.toInt()} / 10",
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: coffeeDark,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 6),
-                      Text('カフェインレベル：${advice.caffeineLevel} / 10',
-                          style: TextStyle(color: cs.onSurfaceVariant)),
                     ],
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // ------------------------------------------------------------------
+                // 2. Sleep/Wake Time
+                // ------------------------------------------------------------------
+                glassCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      label("2. 時刻（24時間表記）"),
+                      const SizedBox(height: 12),
+
+                      Row(
+                        children: [
+                          Expanded(
+                            child: timeBox(
+                              "就寝時刻",
+                              sleepTime,
+                                  () => pickTime(true),
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: timeBox(
+                              "起床時刻",
+                              wakeTime,
+                                  () => pickTime(false),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 30),
+
+                // Analyze Button
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: coffeeAccent,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 35, vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(22),
+                    ),
+                    elevation: 5,
+                  ),
+                  onPressed: analyze,
+                  child: const Text("提案する", style: TextStyle(fontSize: 18)),
+                ),
+
+                const SizedBox(height: 30),
+
+                // ------------------------------------------------------------------
+                // Result (fade-in)
+                // ------------------------------------------------------------------
+                AnimatedOpacity(
+                  duration: const Duration(milliseconds: 600),
+                  opacity: resultCoffee == null ? 0 : 1,
+                  child: resultCoffee == null
+                      ? const SizedBox()
+                      : glassCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        label("分析結果"),
+                        const SizedBox(height: 10),
+                        Text(
+                          "おすすめは：$resultCoffee",
+                          style: TextStyle(
+                            fontSize: 22,
+                            color: coffeeDark,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-        ]),
+        ),
+      ),
+    );
+  }
+
+  // --------------------------------------------------------------------------
+  //  Helper Widgets
+  // --------------------------------------------------------------------------
+
+  Text label(String text) {
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: 17,
+        fontWeight: FontWeight.bold,
+        color: coffeeDark,
+      ),
+    );
+  }
+
+  // --- Glassmorphism Card ---
+  Widget glassCard({required Widget child}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.22),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.28),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.brown.withOpacity(0.15),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- Time Selector Box ---
+  Widget timeBox(String title, TimeOfDay time, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.6),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: coffeeMilk),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title,
+                style:
+                TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: coffeeDark)),
+            const SizedBox(height: 8),
+            Center(
+              child: Text(
+                time.format(context),
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: coffeeDark,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

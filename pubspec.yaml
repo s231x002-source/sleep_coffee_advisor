@@ -1,4 +1,3 @@
-
 name: sleep_coffee_advisor
 description: "Coffee_advisor."
 publish_to: 'none'
@@ -25,6 +24,7 @@ flutter:
 
   assets:
     - assets/fonts/
+    - assets/images/background.png
 
   fonts:
     - family: NotoSansJP
