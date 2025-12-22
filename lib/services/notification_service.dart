@@ -1,9 +1,17 @@
 
+
 // lib/services/notification_service.dart
 import 'dart:io';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
+import 'package:flutter/foundation.dart' show kIsWeb;
+
+
+export 'notification_service_stub.dart'
+if (dart.library.io) 'notification_service_mobile.dart'
+if (dart.library.html) 'notification_service_web.dart';
+
 
 class NotificationService {
   NotificationService._();
@@ -12,8 +20,11 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin _fln = FlutterLocalNotificationsPlugin();
 
   Future<void> init() async {
+    if (kIsWeb) return; // ★Webは通知をスキップ
     // タイムゾーン初期化
     tz.initializeTimeZones();
+    // ★追加：ローカルタイムゾーンを明示設定（例：日本）
+    tz.setLocalLocation(tz.getLocation('Asia/Tokyo'));
 
     // 初期化（Android）
     const AndroidInitializationSettings androidInit =
@@ -73,6 +84,7 @@ class NotificationService {
     required String body,
     String? payload,
   }) async {
+    if (kIsWeb) return -1; // ★Webは予約しない
     final id = DateTime.now().millisecondsSinceEpoch % 0x7fffffff;
     final tzTime = tz.TZDateTime.from(when, tz.local);
     await _fln.zonedSchedule(
@@ -92,4 +104,5 @@ class NotificationService {
 
   Future<void> cancel(int id) => _fln.cancel(id);
   Future<void> cancelAll() => _fln.cancelAll();
+
 }

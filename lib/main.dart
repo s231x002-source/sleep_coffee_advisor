@@ -44,6 +44,10 @@ void main() async {
     debugPrint('Already signed in. uid=${auth.currentUser?.uid}');
   }
 
+  // ★ここで必ず通知初期化（どの分岐でも実行される）
+  await NotificationService.instance.init();
+
+
   runApp(const SleepCoffeeApp());
 }
 
@@ -177,14 +181,23 @@ class _HomePageState extends State<HomePage> {
     );
 
     // 集中力低下予測（scoreに応じて）
+
     if (_advice != null) {
-      final dropAt = _scheduler.concentrationDrop(now, _advice!.score);
+      final dropAt = DateTime.now().add(const Duration(seconds: 10));
       await _notifier.scheduleAt(
         when: dropAt,
-        title: '集中力の低下タイミング予測',
-        body: 'そろそろ集中力が落ち始めます。5〜10分の休憩がおすすめ。',
-        payload: 'focus',
+        title: '【テスト】集中力の低下タイミング予測',
+        body: '10秒後に出ればOK',
+        payload: 'focus_test',
       );
+
+      //final dropAt = _scheduler.concentrationDrop(now, _advice!.score);
+      //await _notifier.scheduleAt(
+        //when: dropAt,
+        //title: '集中力の低下タイミング予測',
+        //body: 'そろそろ集中力が落ち始めます。5〜10分の休憩がおすすめ。',
+        //payload: 'focus',
+      //);
     }
   }
 
