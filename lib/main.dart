@@ -57,7 +57,7 @@ class SleepCoffeeApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: '睡眠×コーヒー提案',
+      title: '睡眠 × コーヒー提案',
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.system,
       theme: ThemeData(
@@ -98,6 +98,15 @@ class _HomePageState extends State<HomePage> {
   late final CoffeeRecommender _recommender = CoffeeRecommender();
   bool _force24h = true;
 
+  // --- Coffee Theme Colors ---
+  final Color coffeeDark = const Color(0xFF6B4F3A);
+  final Color coffeeMilk = const Color(0xFFDCC4A2);
+  final Color coffeeLatte = const Color(0xFFF7EFE5);
+  final Color coffeeAccent = const Color(0xFFB07B52);
+
+  // --- Time Picker ---
+  Future<void> pickTime(bool isSleepTime) async {
+    final TimeOfDay? newTime = await showTimePicker(
   final _notifier = NotificationService.instance; // 追加
   final _scheduler = ScheduleService();           // 追加
 
@@ -131,74 +140,6 @@ class _HomePageState extends State<HomePage> {
         wakeFeeling: _feeling,
       );
     });
-    _saveBrewHistory();
-  }
-
-  Future<void> _saveBrewHistory() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) {
-      debugPrint('No UID: not signed in');
-      return;
-    }
-
-    try {
-      final advice = _advice; // 計算結果（nullの可能性あり）
-      await FirebaseFirestore.instance
-          .collection('users').doc(uid)
-          .collection('brews')
-          .add({
-        'timestamp': FieldValue.serverTimestamp(), // サーバ時刻
-        'wakeFeeling': _feeling.round(),           // 起床時の調子（1–10）
-        'bedTime': _fmt(_bed),                     // 就寝時刻（"23:30"）
-        'wakeTime': _fmt(_wake),                   // 起床時刻（"07:00"）
-        'advice': advice == null
-            ? null
-            : {
-          'coffeeName': advice.coffeeName,
-          'caffeineLevel': advice.caffeineLevel,
-          'score': advice.score,
-          'totalSleepMin': advice.totalSleep.inMinutes,
-        },
-      });
-
-      debugPrint('Brew history saved!');
-    } catch (e, st) {
-      debugPrint('Save failed: $e\n$st');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('保存に失敗しました')),
-        );
-      }
-    }
-    final now = DateTime.now();
-    // 4時間後休憩
-    final restAt = _scheduler.restAfterCaffeine(now);
-    await _notifier.scheduleAt(
-      when: restAt,
-      title: '休憩のタイミングです',
-      body: '摂取から4時間経過。軽いストレッチや目の休息を。',
-      payload: 'rest',
-    );
-
-    // 集中力低下予測（scoreに応じて）
-
-    if (_advice != null) {
-      final dropAt = DateTime.now().add(const Duration(seconds: 10));
-      await _notifier.scheduleAt(
-        when: dropAt,
-        title: '【テスト】集中力の低下タイミング予測',
-        body: '10秒後に出ればOK',
-        payload: 'focus_test',
-      );
-
-      //final dropAt = _scheduler.concentrationDrop(now, _advice!.score);
-      //await _notifier.scheduleAt(
-        //when: dropAt,
-        //title: '集中力の低下タイミング予測',
-        //body: 'そろそろ集中力が落ち始めます。5〜10分の休憩がおすすめ。',
-        //payload: 'focus',
-      //);
-    }
   }
 
   String _fmt(TimeOfDay t) =>
@@ -471,7 +412,7 @@ class _ResultCard extends StatelessWidget {
                   .titleMedium
                   ?.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
-          Text('総睡眠時間：$h時間$m分'),
+          Text('総睡眠時間：${h}時間${m}分'),
           Text('総合スコア：${advice.score.toStringAsFixed(1)} / 10'),
           if (h == 24 && m == 0)
             Padding(
