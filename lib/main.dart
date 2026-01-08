@@ -1,64 +1,68 @@
-
 import 'dart:ui' show FontFeature;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-
-// ★ 追加：Firebase Core をインポート
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 
-// ★ 追加：flutterfire configure が生成したオプション
 import 'firebase_options.dart';
+import 'services/notification_service.dart';
+import 'services/schedule_service.dart';
+import 'services/in_app_notification_service.dart';
 
-import 'services/notification_service.dart'; // 12月11日　追記
-import 'services/schedule_service.dart';     // 12月11日　追記
+// ✅ デバッグ用：短い遅延でSnackBarが出るか確認（本番では false 推奨）
+const bool DEBUG_SHORT_DELAYS = true;
 
-
-
-
-
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  //匿名ログイン（未ログイン時のみ）
+  // 匿名ログイン（未ログイン時のみ）
   final auth = FirebaseAuth.instance;
   if (auth.currentUser == null) {
     try {
       await auth.signInAnonymously();
       debugPrint('Signed in anonymously. uid=${auth.currentUser?.uid}');
-      // ★ 追加：通知の初期化（権限&チャネル&タイムゾーン）
-      await NotificationService.instance.init();
-
     } on FirebaseAuthException catch (e) {
       debugPrint('Anonymous sign-in failed: ${e.code} ${e.message}');
-      // 失敗してもアプリは起動できるようにする（必要ならリトライUIを用意）
-
-      // ★ 通知の初期化（チャンネル作成＆権限リクエスト＆タイムゾーン初期化）
-      await NotificationService.instance.init();
+      // 失敗してもアプリは起動可能
     }
   } else {
     debugPrint('Already signed in. uid=${auth.currentUser?.uid}');
   }
 
-  // ★ここで必ず通知初期化（どの分岐でも実行される）
-  await NotificationService.instance.init();
+  // ✅ モバイル(将来)に備えて：通知初期化は「必要なプラットフォームのみ」
+  // Web/デスクトップではアプリ内通知（SnackBar）を主に使う
+  final isMobile = !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
+  if (isMobile) {
+    await NotificationService.instance.init();
+  }
 
-
+  InAppNotificationService.instance.bind(SleepCoffeeApp.messengerKey);
   runApp(const SleepCoffeeApp());
 }
 
 class SleepCoffeeApp extends StatelessWidget {
   const SleepCoffeeApp({super.key});
 
+  // ✅ SnackBar表示に必要
+  static final GlobalKey<ScaffoldMessengerState> messengerKey =
+  GlobalKey<ScaffoldMessengerState>();
+
   @override
   Widget build(BuildContext context) {
+    // ✅ サービスにKeyを渡す（何度呼ばれてもOK）
+    InAppNotificationService.instance.bind(messengerKey);
+
     return MaterialApp(
       title: '睡眠×コーヒー提案',
       debugShowCheckedModeBanner: false,
+      scaffoldMessengerKey: messengerKey,
       themeMode: ThemeMode.system,
       theme: ThemeData(
         useMaterial3: true,
@@ -75,10 +79,7 @@ class SleepCoffeeApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      supportedLocales: const <Locale>[
-        Locale('ja'),
-        Locale('en'),
-      ],
+      supportedLocales: const <Locale>[Locale('ja'), Locale('en')],
       home: const HomePage(),
     );
   }
@@ -86,6 +87,7 @@ class SleepCoffeeApp extends StatelessWidget {
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
+
   @override
   State<HomePage> createState() => _HomePageState();
 }
@@ -98,9 +100,7 @@ class _HomePageState extends State<HomePage> {
   late final CoffeeRecommender _recommender = CoffeeRecommender();
   bool _force24h = true;
 
-  final _notifier = NotificationService.instance; // 追加
-  final _scheduler = ScheduleService();           // 追加
-
+  final _scheduler = ScheduleService();
 
   Future<void> _pickTime({required bool isBed}) async {
     final picked = await showTimePicker(
@@ -118,6 +118,7 @@ class _HomePageState extends State<HomePage> {
         );
       },
     );
+
     if (picked != null) {
       setState(() => isBed ? _bed = picked : _wake = picked);
     }
@@ -131,10 +132,11 @@ class _HomePageState extends State<HomePage> {
         wakeFeeling: _feeling,
       );
     });
-    _saveBrewHistory();
+    _saveBrewHistoryAndSchedule();
   }
 
-  Future<void> _saveBrewHistory() async {
+  /// ✅ 保存 + 通知（Web/デスクトップはSnackBar、モバイルはOS通知も併用）
+  Future<void> _saveBrewHistoryAndSchedule() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
       debugPrint('No UID: not signed in');
@@ -142,15 +144,16 @@ class _HomePageState extends State<HomePage> {
     }
 
     try {
-      final advice = _advice; // 計算結果（nullの可能性あり）
+      final advice = _advice;
       await FirebaseFirestore.instance
-          .collection('users').doc(uid)
+          .collection('users')
+          .doc(uid)
           .collection('brews')
           .add({
-        'timestamp': FieldValue.serverTimestamp(), // サーバ時刻
-        'wakeFeeling': _feeling.round(),           // 起床時の調子（1–10）
-        'bedTime': _fmt(_bed),                     // 就寝時刻（"23:30"）
-        'wakeTime': _fmt(_wake),                   // 起床時刻（"07:00"）
+        'timestamp': FieldValue.serverTimestamp(),
+        'wakeFeeling': _feeling.round(),
+        'bedTime': _fmt(_bed),
+        'wakeTime': _fmt(_wake),
         'advice': advice == null
             ? null
             : {
@@ -160,7 +163,6 @@ class _HomePageState extends State<HomePage> {
           'totalSleepMin': advice.totalSleep.inMinutes,
         },
       });
-
       debugPrint('Brew history saved!');
     } catch (e, st) {
       debugPrint('Save failed: $e\n$st');
@@ -170,34 +172,84 @@ class _HomePageState extends State<HomePage> {
         );
       }
     }
+
+    // ✅ ここから通知スケジューリング
     final now = DateTime.now();
-    // 4時間後休憩
-    final restAt = _scheduler.restAfterCaffeine(now);
-    await _notifier.scheduleAt(
+
+    // Web/デスクトップ：アプリ内通知
+    // モバイル：アプリ内通知 + OS通知（将来の確認用）
+    final isMobile = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS);
+
+    // まず「予約した」ことが分かるように即時SnackBar
+    await InAppNotificationService.instance.showNow(
+      title: '通知を予約しました',
+      body: DEBUG_SHORT_DELAYS
+          ? '指定時刻にリマインドします'
+          : '指定時刻にリマインドします',
+      payload: 'scheduled',
+    );
+
+
+// テストしやすい短い遅延に切替（遅延だけデバッグ、文言は本番のまま）
+    final restAt = DEBUG_SHORT_DELAYS
+        ? now.add(const Duration(seconds: 5))
+        : _scheduler.restAfterCaffeine(now);
+
+    DateTime? dropAt;
+    if (_advice != null) {
+      dropAt = DEBUG_SHORT_DELAYS
+          ? now.add(const Duration(seconds: 10))
+          : _scheduler.concentrationDrop(now, _advice!.score);
+    }
+
+// ✅ 表示したい本番文言
+    const restBody = '摂取から4時間経過。軽いストレッチや目の休息を。';
+    const focusBody = 'そろそろ集中力が落ち始めます。5〜10分の休憩がおすすめ。';
+
+// （任意）デバッグ中だと分かる注記だけ追加（本文自体は変えない）
+    final restBodyShown =
+    DEBUG_SHORT_DELAYS ? '$restBody' : restBody;
+
+    final focusBodyShown =
+    DEBUG_SHORT_DELAYS ? '$focusBody' : focusBody;
+
+// 休憩（アプリ内）
+    await InAppNotificationService.instance.scheduleAt(
       when: restAt,
       title: '休憩のタイミングです',
-      body: '摂取から4時間経過。軽いストレッチや目の休息を。',
+      body: restBodyShown,
       payload: 'rest',
     );
 
-    // 集中力低下予測（scoreに応じて）
-
-    if (_advice != null) {
-      final dropAt = DateTime.now().add(const Duration(seconds: 10));
-      await _notifier.scheduleAt(
+// 集中力低下（アプリ内）
+    if (dropAt != null) {
+      await InAppNotificationService.instance.scheduleAt(
         when: dropAt,
-        title: '【テスト】集中力の低下タイミング予測',
-        body: '10秒後に出ればOK',
-        payload: 'focus_test',
+        title: '集中力の低下タイミング予測',
+        body: focusBodyShown,
+        payload: 'focus',
       );
+    }
 
-      //final dropAt = _scheduler.concentrationDrop(now, _advice!.score);
-      //await _notifier.scheduleAt(
-        //when: dropAt,
-        //title: '集中力の低下タイミング予測',
-        //body: 'そろそろ集中力が落ち始めます。5〜10分の休憩がおすすめ。',
-        //payload: 'focus',
-      //);
+
+    // ✅ モバイルのみ：OS通知も併用（将来スマホで「本物の通知」が出ることを確認するため）
+    if (isMobile) {
+      await NotificationService.instance.scheduleAt(
+        when: restAt,
+        title: '休憩のタイミングです',
+        body: '摂取から4時間経過。軽いストレッチや目の休息を。',
+        payload: 'rest',
+      );
+      if (dropAt != null) {
+        await NotificationService.instance.scheduleAt(
+          when: dropAt,
+          title: '集中力の低下タイミング予測',
+          body: 'そろそろ集中力が落ち始めます。5〜10分の休憩がおすすめ。',
+          payload: 'focus',
+        );
+      }
     }
   }
 
@@ -248,7 +300,6 @@ class _HomePageState extends State<HomePage> {
                 ),
               ),
               const SizedBox(height: 16),
-
               const _SectionTitle('1. 起きた時の調子（1〜10）'),
               Card.outlined(
                 child: Padding(
@@ -273,7 +324,6 @@ class _HomePageState extends State<HomePage> {
                       const SizedBox(
                         width: 48,
                         child: Text(
-                          // $h 形式のlint対応: こちらは数値ではないが braceなしでOKな箇所のみ修正
                           '',
                           textAlign: TextAlign.center,
                           style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
@@ -283,9 +333,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 12),
-
               const _SectionTitle('2. 時刻（24時間表記）'),
               Row(
                 children: [
@@ -306,7 +354,6 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ],
               ),
-
               Align(
                 alignment: Alignment.centerRight,
                 child: SwitchListTile.adaptive(
@@ -316,9 +363,7 @@ class _HomePageState extends State<HomePage> {
                   onChanged: (v) => setState(() => _force24h = v),
                 ),
               ),
-
               const SizedBox(height: 16),
-
               SizedBox(
                 width: double.infinity,
                 child: FilledButton.icon(
@@ -330,11 +375,8 @@ class _HomePageState extends State<HomePage> {
                   onPressed: _calculate,
                 ),
               ),
-
               const SizedBox(height: 16),
-
               if (_advice != null) _ResultCard(advice: _advice!),
-
               const SizedBox(height: 24),
               Text('Flutter (Material 3) Demo', style: TextStyle(color: cs.outline)),
             ],
@@ -348,6 +390,7 @@ class _HomePageState extends State<HomePage> {
 class _SectionTitle extends StatelessWidget {
   final String text;
   const _SectionTitle(this.text, {super.key});
+
   @override
   Widget build(BuildContext context) {
     return Align(
@@ -357,7 +400,8 @@ class _SectionTitle extends StatelessWidget {
         child: Text(
           text,
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700) ??
+            fontWeight: FontWeight.w700,
+          ) ??
               const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
         ),
       ),
@@ -369,7 +413,13 @@ class _TimeField extends StatelessWidget {
   final String label;
   final String value;
   final VoidCallback onTap;
-  const _TimeField({required this.label, required this.value, required this.onTap, super.key});
+  const _TimeField({
+    required this.label,
+    required this.value,
+    required this.onTap,
+    super.key,
+  });
+
   @override
   Widget build(BuildContext context) {
     return InkWell(
@@ -412,7 +462,7 @@ class CoffeeRecommender {
     final total = _calcTotalSleep(bedTime, wakeTime);
     const target = Duration(hours: 8);
     final qtyScore =
-        (10.0 - ((total - target).inMinutes.abs() / 30.0)).clamp(0, 10).toDouble();
+    (10.0 - ((total - target).inMinutes.abs() / 30.0)).clamp(0, 10).toDouble();
     final score = ((qtyScore + wakeFeeling) / 2).clamp(0, 10).toDouble();
     final caffeine = (11 - score.round()).clamp(1, 10);
     final name = _nameFromLevel(caffeine);
@@ -444,6 +494,7 @@ class CoffeeRecommender {
 class _ResultCard extends StatelessWidget {
   final Advice advice;
   const _ResultCard({required this.advice});
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -471,16 +522,8 @@ class _ResultCard extends StatelessWidget {
                   .titleMedium
                   ?.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
-          Text('総睡眠時間：$h時間$m分'),
+          Text('総睡眠時間：${h}時間${m}分'),
           Text('総合スコア：${advice.score.toStringAsFixed(1)} / 10'),
-          if (h == 24 && m == 0)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(
-                '就寝と起床が同じ時刻です。翌日の起床として計算しました。',
-                style: TextStyle(color: cs.onSurfaceVariant),
-              ),
-            ),
           const SizedBox(height: 12),
           Container(
             decoration: BoxDecoration(
