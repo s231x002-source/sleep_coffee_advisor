@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'services/in_app_notification_service.dart';
 import 'ui/home_page.dart';
+import 'ui/root_page.dart'; // ✅ 追加
 
 class SleepCoffeeApp extends StatelessWidget {
   const SleepCoffeeApp({super.key});
@@ -45,7 +46,7 @@ class SleepCoffeeApp extends StatelessWidget {
         Locale('en'),
       ],
 
-      home: const HomePage(),
+      home: const RootPage(), // ✅ ここを変更
     );
   }
 }
