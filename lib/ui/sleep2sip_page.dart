@@ -19,6 +19,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/notification_service.dart';
 import '../services/in_app_notification_service.dart';
 
+import 'coffee_nap_timer_page.dart';
+import 'widgets/app_background.dart'; // 追加
+
 
 class Sleep2SipPage extends StatefulWidget {
   const Sleep2SipPage({
@@ -238,6 +241,16 @@ class _Sleep2SipPageState extends State<Sleep2SipPage> {
     }
   }
 
+
+  int _recommendedNapMinutes(Advice advice) {
+    // 例：カフェインレベルが高いほど短めのナップを推奨
+    if (advice.caffeineLevel >= 8) return 10;
+    if (advice.caffeineLevel >= 6) return 15;
+    if (advice.caffeineLevel >= 4) return 20;
+    return 25;
+  }
+
+
   String _fmt(TimeOfDay t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
@@ -245,22 +258,7 @@ class _Sleep2SipPageState extends State<Sleep2SipPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       // scroll UI と共存するので、ここは各タブで独立した Scaffold でOK
-      body: Container(
-        decoration: BoxDecoration(
-          image: const DecorationImage(
-            image: AssetImage("assets/images/background.png"),
-            fit: BoxFit.cover,
-            opacity: 0.32,
-          ),
-          gradient: LinearGradient(
-            colors: [
-              Colors.brown.shade900.withOpacity(0.60),
-              Colors.brown.shade400.withOpacity(0.40),
-            ],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
+      body: AppBackground(
         child: SafeArea(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(20),
@@ -409,6 +407,23 @@ class _Sleep2SipPageState extends State<Sleep2SipPage> {
                 ),
 
                 const SizedBox(height: 30),
+
+                _glassCard(
+                  child: ListTile(
+                    leading: const Icon(Icons.timer_rounded),
+                    title: const Text('コーヒーナップタイマー'),
+                    subtitle: const Text('コーヒーを飲んだあと短時間のお昼寝用タイマー'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const CoffeeNapTimerPage(initialMinutes: 20),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+
               ],
             ),
           ),
@@ -556,3 +571,4 @@ class _ResultBlock extends StatelessWidget {
     );
   }
 }
+
