@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'home_page.dart';
 import 'coffee_feed_page.dart';
+import 'sleep2sip_page.dart';
 
 class RootPage extends StatefulWidget {
   const RootPage({super.key});
@@ -21,7 +22,13 @@ class _RootPageState extends State<RootPage> {
       body: IndexedStack(
         index: index,
         children: const [
-          HomePage(),        // 提案画面
+
+          Sleep2SipPage(
+            debugShortDelays: true,      // デバッグ用（本番は false 推奨）
+            enableSaveAndNotify: true,   // UIだけなら false
+          ),
+
+          //HomePage(),        // 提案画面
           CoffeeFeedPage(),  // scroll UI
         ],
       ),
