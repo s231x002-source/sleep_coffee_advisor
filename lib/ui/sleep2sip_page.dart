@@ -1,26 +1,23 @@
 
 // lib/ui/sleep2sip_page.dart
 import 'dart:ui' show ImageFilter;
-
 import 'package:flutter/material.dart';
-
 import '../controllers/home_controller.dart';
 import '../data/brew_repository.dart';
 import '../domain/advice.dart';
 import '../domain/coffee_recommender.dart';
 import '../services/schedule_service.dart';
-
 // 追加
 import 'package:flutter/foundation.dart'
     show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
 import '../services/notification_service.dart';
 import '../services/in_app_notification_service.dart';
-
 import 'coffee_nap_timer_page.dart';
 import 'widgets/app_background.dart'; // 追加
+import '../services/auth_service.dart';
+
 
 
 class Sleep2SipPage extends StatefulWidget {
@@ -291,6 +288,72 @@ class _Sleep2SipPageState extends State<Sleep2SipPage> {
                   ),
                 ),
                 const SizedBox(height: 25),
+
+// ✅ ログイン状態表示＆ボタン
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: StreamBuilder<User?>(
+                    stream: FirebaseAuth.instance.authStateChanges(),
+                    builder: (context, snapshot) {
+                      final user = snapshot.data;
+
+                      final bool isSignedIn = user != null;
+                      final bool isAnonymous = user?.isAnonymous ?? true;
+
+                      // 表示文言
+                      final statusText = !isSignedIn
+                          ? '未ログイン'
+                          : (isAnonymous ? 'ゲスト(匿名)利用中' : 'Googleでログイン中');
+
+                      // ボタン
+                      if (isSignedIn && !isAnonymous) {
+                        // Googleログイン中 → ログアウト
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(statusText, style: TextStyle(color: coffeeLatte)),
+                            const SizedBox(height: 6),
+                            OutlinedButton.icon(
+                              onPressed: () async {
+                                await AuthService.instance.signOut();
+                              },
+                              icon: const Icon(Icons.logout),
+                              label: const Text('ログアウト'),
+                            ),
+                          ],
+                        );
+                      } else {
+                        // ゲスト/未ログイン → Googleログイン（匿名なら link で昇格）
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(statusText, style: TextStyle(color: coffeeLatte)),
+                            const SizedBox(height: 6),
+                            FilledButton.icon(
+                              onPressed: () async {
+                                try {
+                                  await AuthService.instance.signInWithGoogleOrLink();
+                                } on FirebaseAuthException catch (e) {
+                                  // canceled など
+                                  debugPrint('Google sign-in failed: ${e.code} ${e.message}');
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('ログインに失敗しました: ${e.code}')),
+                                  );
+                                } catch (e) {
+                                  debugPrint('Google sign-in error: $e');
+                                }
+                              },
+                              icon: const Icon(Icons.login),
+                              label: const Text('Googleでログイン'),
+                            ),
+                          ],
+                        );
+                      }
+                    },
+                  ),
+                ),
+
 
                 // --- 1. Condition Slider ---
                 _glassCard(

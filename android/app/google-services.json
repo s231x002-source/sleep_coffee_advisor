@@ -12,7 +12,20 @@
           "package_name": "com.example.sleep_coffee_advisor"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "91482257895-kc9pfd16ubvqebdr9p5je1emqbfqsng5.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.sleep_coffee_advisor",
+            "certificate_hash": "0a485026406ec98dc0bc9f6dd50e0744bcf1a7a3"
+          }
+        },
+        {
+          "client_id": "91482257895-jq5lk7rc2rbpluigpgk04bdsnmt8krbi.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAxgx8TMxFcQxzzKdt1oHHVsxur3SobqGY"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "91482257895-jq5lk7rc2rbpluigpgk04bdsnmt8krbi.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "91482257895-ejlqb31vc462dr7572l8v4lo0vvdgla7.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.sleepCoffeeAdvisor"
+              }
+            }
+          ]
         }
       }
     }
